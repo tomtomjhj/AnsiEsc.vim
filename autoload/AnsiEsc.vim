@@ -1377,7 +1377,7 @@ endfun
 " s:MultiElementHandler: builds custom syntax highlighting for three or more element ansi escape sequences {{{2
 fun! s:MultiElementHandler()
 "  call Dfunc("s:MultiElementHandler()")
-  let curwp= SaveWinPosn(0)
+  let curwp= s:SaveWinPosn(0)
   keepj 1
   keepj norm! 0
   let mehcnt = 0
@@ -1589,7 +1589,7 @@ fun! s:MultiElementHandler()
 
   endwhile
 
-  call RestoreWinPosn(curwp)
+  call s:RestoreWinPosn(curwp)
 "  call Dret("s:MultiElementHandler")
 endfun
 
@@ -1619,6 +1619,80 @@ fun! s:Ansi2Gui(code)
   endif
 "  call Dret("s:Ansi2Gui ".guicolor)
   return guicolor
+endfun
+
+" cecutil.vim {{{1
+" SaveWinPosn: {{{2
+"    let winposn= SaveWinPosn()  will save window position in winposn variable
+"    call SaveWinPosn()          will save window position in b:cecutil_winposn{b:cecutil_iwinposn}
+"    let winposn= SaveWinPosn(0) will *only* save window position in winposn variable (no stacking done)
+fun! s:SaveWinPosn(...)
+  let savedposn= winsaveview()
+  if a:0 == 0
+   if !exists("b:cecutil_iwinposn")
+    let b:cecutil_iwinposn= 1
+   else
+    let b:cecutil_iwinposn= b:cecutil_iwinposn + 1
+   endif
+   let b:cecutil_winposn{b:cecutil_iwinposn}= savedposn
+  endif
+  return savedposn
+endfun
+
+" RestoreWinPosn: {{{2
+"      call RestoreWinPosn()
+"      call RestoreWinPosn(winposn)
+fun! s:RestoreWinPosn(...)
+  if line("$") == 1 && getline(1) == ""
+   return ""
+  endif
+  if a:0 == 0 || type(a:1) != 4
+   " use saved window position in b:cecutil_winposn{b:cecutil_iwinposn} if it exists
+   if exists("b:cecutil_iwinposn") && exists("b:cecutil_winposn{b:cecutil_iwinposn}")
+    try
+	 call winrestview(b:cecutil_winposn{b:cecutil_iwinposn})
+    catch /^Vim\%((\a\+)\)\=:E749/
+     " ignore empty buffer error messages
+    endtry
+    " normally drop top-of-stack by one
+    " but while new top-of-stack doesn't exist
+    " drop top-of-stack index by one again
+    if b:cecutil_iwinposn >= 1
+     unlet b:cecutil_winposn{b:cecutil_iwinposn}
+     let b:cecutil_iwinposn= b:cecutil_iwinposn - 1
+     while b:cecutil_iwinposn >= 1 && !exists("b:cecutil_winposn{b:cecutil_iwinposn}")
+      let b:cecutil_iwinposn= b:cecutil_iwinposn - 1
+     endwhile
+     if b:cecutil_iwinposn < 1
+      unlet b:cecutil_iwinposn
+     endif
+    endif
+   else
+    echohl WarningMsg
+    echomsg "***warning*** need to SaveWinPosn first!"
+    echohl None
+   endif
+
+  else	 " handle input argument
+"   echomsg "Decho: using input a:1<".a:1.">"
+   " use window position passed to this function
+   call winrestview(a:1)
+   " remove a:1 pattern from b:cecutil_winposn{b:cecutil_iwinposn} stack
+   if exists("b:cecutil_iwinposn")
+    let jwinposn= b:cecutil_iwinposn
+    while jwinposn >= 1                     " search for a:1 in iwinposn..1
+     if exists("b:cecutil_winposn{jwinposn}")    " if it exists
+      if a:1 == b:cecutil_winposn{jwinposn}      " and the pattern matches
+       unlet b:cecutil_winposn{jwinposn}            " unlet it
+       if jwinposn == b:cecutil_iwinposn            " if at top-of-stack
+        let b:cecutil_iwinposn= b:cecutil_iwinposn - 1      " drop stacktop by one
+       endif
+      endif
+     endif
+     let jwinposn= jwinposn - 1
+    endwhile
+   endif
+  endif
 endfun
 
 " ---------------------------------------------------------------------
